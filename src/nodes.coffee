@@ -106,7 +106,7 @@ exports.Base = class Base
   makeReturn: (res) ->
     me = @unwrapAll()
     if res
-      new Call new Literal("#{res}.push"), [me]
+      new Call new Literal("#{res}['push']"), [me]
     else
       new Return me
 
@@ -322,7 +322,7 @@ exports.Block = class Block extends Base
       @expressions = rest
     fragments = @compileWithDeclarations o
     return fragments if o.bare
-    [].concat prelude, @makeCode("(function() {\n"), fragments, @makeCode("\n}).call(this);\n")
+    [].concat prelude, @makeCode("(function() {\n"), fragments, @makeCode("\n})['call'](this);\n")
 
   # Compile the expressions body for the contents of a function, with
   # declarations of all inner variables pushed up to the top.
@@ -583,12 +583,12 @@ exports.Call = class Call extends Base
   superReference: (o) ->
     method = o.scope.namedMethod()
     if method?.klass
-      accesses = [new Access(new Literal '__super__')]
-      accesses.push new Access new Literal 'constructor' if method.static
+      accesses = [new Access(new Literal '"__super__"')]
+      accesses.push new Access new Literal '"constructor"' if method.static
       accesses.push new Access new Literal method.name
       (new Value (new Literal method.klass), accesses).compile o
     else if method?.ctor
-      "#{method.name}.__super__.constructor"
+      "#{method.name}['__super__']['constructor']"
     else
       @error 'cannot call super outside of an instance method.'
 
@@ -642,7 +642,7 @@ exports.Call = class Call extends Base
 
     fragments = []
     if @isSuper
-      preface = @superReference(o) + ".call(#{@superThis(o)}"
+      preface = @superReference(o) + "['call'](#{@superThis(o)}"
       if compiledArgs.length then preface += ", "
       fragments.push @makeCode preface
     else
@@ -661,15 +661,15 @@ exports.Call = class Call extends Base
   # splatArgs is an array of CodeFragments to put into the 'apply'.
   compileSplat: (o, splatArgs) ->
     if @isSuper
-      return [].concat @makeCode("#{ @superReference o }.apply(#{@superThis(o)}, "),
+      return [].concat @makeCode("#{ @superReference o }['apply'](#{@superThis(o)}, "),
         splatArgs, @makeCode(")")
 
     if @isNew
       idt = @tab + TAB
       return [].concat @makeCode("""
         (function(func, args, ctor) {
-        #{idt}ctor.prototype = func.prototype;
-        #{idt}var child = new ctor, result = func.apply(child, args);
+        #{idt}ctor['prototype'] = func['prototype'];
+        #{idt}var child = new ctor, result = func['apply'](child, args);
         #{idt}return Object(result) === result ? result : child;
         #{@tab}})("""),
         (@variable.compileToFragments o, LEVEL_LIST),
@@ -692,7 +692,7 @@ exports.Call = class Call extends Base
       else
         ref = 'null'
       answer = answer.concat fun
-    answer = answer.concat @makeCode(".apply(#{ref}, "), splatArgs, @makeCode(")")
+    answer = answer.concat @makeCode("['apply'](#{ref}, "), splatArgs, @makeCode(")")
 
 #### Extends
 
@@ -833,10 +833,10 @@ exports.Range = class Range extends Base
       vars    = "#{i} = #{@fromC}" + if @toC isnt @toVar then ", #{@toC}" else ''
       cond    = "#{@fromVar} <= #{@toVar}"
       body    = "var #{vars}; #{cond} ? #{i} <#{@equals} #{@toVar} : #{i} >#{@equals} #{@toVar}; #{cond} ? #{i}++ : #{i}--"
-    post   = "{ #{result}.push(#{i}); }\n#{idt}return #{result};\n#{o.indent}"
+    post   = "{ #{result}['push'](#{i}); }\n#{idt}return #{result};\n#{o.indent}"
     hasArgs = (node) -> node?.contains (n) -> n instanceof Literal and n.value is 'arguments' and not n.asKey
     args   = ', arguments' if hasArgs(@from) or hasArgs(@to)
-    [@makeCode "(function() {#{pre}\n#{idt}for (#{body})#{post}}).apply(this#{args ? ''})"]
+    [@makeCode "(function() {#{pre}\n#{idt}for (#{body})#{post}})['apply'](this#{args ? ''})"]
 
 #### Slice
 
@@ -868,7 +868,7 @@ exports.Slice = class Slice extends Base
         else
           compiled = to.compileToFragments o, LEVEL_ACCESS
           "+#{fragmentsToText compiled} + 1 || 9e9"
-    [@makeCode ".slice(#{ fragmentsToText fromCompiled }#{ toStr or '' })"]
+    [@makeCode "['slice'](#{ fragmentsToText fromCompiled }#{ toStr or '' })"]
 
 #### Obj
 
@@ -1015,7 +1015,7 @@ exports.Class = class Class extends Base
             if func.bound
               func.context = name
           else
-            assign.variable = new Value(new Literal(name), [(new Access new Literal 'prototype'), new Access base ])
+            assign.variable = new Value(new Literal(name), [(new Access new Literal '"prototype"'), new Access base ])
             if func instanceof Code and func.bound
               @boundFuncs.push base
               func.bound = no
@@ -1054,8 +1054,8 @@ exports.Class = class Class extends Base
     @ctor.klass = null
     @ctor.noReturn = yes
     if missing
-      superCall = new Literal "#{name}.__super__.constructor.apply(this, arguments)" if @parent
-      superCall = new Literal "#{@externalCtor}.apply(this, arguments)" if @externalCtor
+      superCall = new Literal "#{name}['__super__']['constructor']['apply'](this, arguments)" if @parent
+      superCall = new Literal "#{@externalCtor}['apply'](this, arguments)" if @externalCtor
       if superCall
         ref = new Literal o.scope.freeVariable 'ref'
         @ctor.body.unshift new Assign ref, superCall
@@ -1202,10 +1202,10 @@ exports.Assign = class Assign extends Base
       if not splat and obj instanceof Splat
         name = obj.name.unwrap().value
         obj = obj.unwrap()
-        val = "#{olen} <= #{vvarText}.length ? #{ utility 'slice' }.call(#{vvarText}, #{i}"
+        val = "#{olen} <= #{vvarText}['length'] ? #{ utility 'slice' }['call'](#{vvarText}, #{i}"
         if rest = olen - i - 1
           ivar = o.scope.freeVariable 'i'
-          val += ", #{ivar} = #{vvarText}.length - #{rest}) : (#{ivar} = #{i}, [])"
+          val += ", #{ivar} = #{vvarText}['length'] - #{rest}) : (#{ivar} = #{i}, [])"
         else
           val += ") : []"
         val   = new Literal val
@@ -1258,7 +1258,7 @@ exports.Assign = class Assign extends Base
     else
       to = "9e9"
     [valDef, valRef] = @value.cache o, LEVEL_LIST
-    answer = [].concat @makeCode("[].splice.apply(#{name}, [#{fromDecl}, #{to}].concat("), valDef, @makeCode(")), "), valRef
+    answer = [].concat @makeCode("[]['splice']['apply'](#{name}, [#{fromDecl}, #{to}]['concat']("), valDef, @makeCode(")), "), valRef
     if o.level > LEVEL_TOP then @wrapInBraces answer else answer
 
 #### Code
@@ -1449,21 +1449,21 @@ exports.Splat = class Splat extends Base
       node = list[0]
       fragments = node.compileToFragments o, LEVEL_LIST
       return fragments if apply
-      return [].concat node.makeCode("#{ utility 'slice' }.call("), fragments, node.makeCode(")")
+      return [].concat node.makeCode("#{ utility 'slice' }['call']("), fragments, node.makeCode(")")
     args = list[index..]
     for node, i in args
       compiledNode = node.compileToFragments o, LEVEL_LIST
       args[i] = if node instanceof Splat
-      then [].concat node.makeCode("#{ utility 'slice' }.call("), compiledNode, node.makeCode(")")
+      then [].concat node.makeCode("#{ utility 'slice' }['call']("), compiledNode, node.makeCode(")")
       else [].concat node.makeCode("["), compiledNode, node.makeCode("]")
     if index is 0
       node = list[0]
       concatPart = (node.joinFragmentArrays args[1..], ', ')
-      return args[0].concat node.makeCode(".concat("), concatPart, node.makeCode(")")
+      return args[0].concat node.makeCode("['concat']("), concatPart, node.makeCode(")")
     base = (node.compileToFragments o, LEVEL_LIST for node in list[...index])
     base = list[0].joinFragmentArrays base, ', '
     concatPart = list[index].joinFragmentArrays args, ', '
-    [].concat list[0].makeCode("["), base, list[index].makeCode("].concat("), concatPart, (last list).makeCode(")")
+    [].concat list[0].makeCode("["), base, list[index].makeCode("]['concat']("), concatPart, (last list).makeCode(")")
 
 #### While
 
@@ -1699,7 +1699,7 @@ exports.In = class In extends Base
 
   compileLoopTest: (o) ->
     [sub, ref] = @object.cache o, LEVEL_LIST
-    fragments = [].concat @makeCode(utility('indexOf') + ".call("), @array.compileToFragments(o, LEVEL_LIST),
+    fragments = [].concat @makeCode(utility('indexOf') + "['call']("), @array.compileToFragments(o, LEVEL_LIST),
       @makeCode(", "), ref, @makeCode(") " + if @negated then '< 0' else '>= 0')
     return fragments if (fragmentsToText sub) is (fragmentsToText ref)
     fragments = sub.concat @makeCode(', '), fragments
@@ -1878,8 +1878,8 @@ exports.For = class For extends While
       if not @object
         defPart += "#{@tab}#{step};\n" if step isnt stepVar
         lvar = scope.freeVariable 'len' unless @step and stepNum and down = (+stepNum < 0)
-        declare = "#{kvarAssign}#{ivar} = 0, #{lvar} = #{svar}.length"
-        declareDown = "#{kvarAssign}#{ivar} = #{svar}.length - 1"
+        declare = "#{kvarAssign}#{ivar} = 0, #{lvar} = #{svar}['length']"
+        declareDown = "#{kvarAssign}#{ivar} = #{svar}['length'] - 1"
         compare = "#{ivar} < #{lvar}"
         compareDown = "#{ivar} >= 0"
         if @step
@@ -1909,7 +1909,7 @@ exports.For = class For extends While
     varPart = "\n#{idt1}#{namePart};" if namePart
     if @object
       forPartFragments   = [@makeCode("#{kvar} in #{svar}")]
-      guardPart = "\n#{idt1}if (!#{utility 'hasProp'}.call(#{svar}, #{kvar})) continue;" if @own
+      guardPart = "\n#{idt1}if (!#{utility 'hasProp'}['call'](#{svar}, #{kvar})) continue;" if @own
     bodyFragments = body.compileToFragments merge(o, indent: idt1), LEVEL_TOP
     if bodyFragments and (bodyFragments.length > 0)
       bodyFragments = [].concat @makeCode("\n"), bodyFragments, @makeCode("\n")
@@ -2081,7 +2081,7 @@ Closure =
     if argumentsNode and expressions.classBody
       argumentsNode.error "Class bodies shouldn't reference arguments"
     if argumentsNode or expressions.contains @isLiteralThis
-      meth = new Literal if argumentsNode then 'apply' else 'call'
+      meth = new Literal if argumentsNode then '"apply"' else '"call"'
       args = [new Literal 'this']
       args.push new Literal 'arguments' if argumentsNode
       func = new Value func, [new Access meth]
@@ -2112,22 +2112,22 @@ UTILITIES =
   # Correctly set up a prototype chain for inheritance, including a reference
   # to the superclass for `super()` calls, and copies of any static properties.
   extends: -> """
-    function(child, parent) { for (var key in parent) { if (#{utility 'hasProp'}.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; }
+    function(child, parent) { for (var key in parent) { if (#{utility 'hasProp'}['call'](parent, key)) child[key] = parent[key]; } function ctor() { this['constructor'] = child; } ctor['prototype'] = parent['prototype']; child['prototype'] = new ctor(); child['__super__'] = parent['prototype']; return child; }
   """
 
   # Create a function bound to the current value of "this".
   bind: -> '''
-    function(fn, me){ return function(){ return fn.apply(me, arguments); }; }
+    function(fn, me){ return function(){ return fn['apply'](me, arguments); }; }
   '''
 
   # Discover if an item is in an array.
   indexOf: -> """
-    [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; }
+    []['indexOf'] || function(item) { for (var i = 0, l = this['length']; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; }
   """
 
   # Shortcuts to speed up the lookup time for native functions.
-  hasProp: -> '{}.hasOwnProperty'
-  slice  : -> '[].slice'
+  hasProp: -> "{}['hasOwnProperty']"
+  slice  : -> "[]['slice']"
 
 # Levels indicate a node's position in the AST. Useful for knowing if
 # parens are necessary or superfluous.
@@ -2148,7 +2148,7 @@ METHOD_DEF = ///
   ^
     (?:
       (#{IDENTIFIER_STR})
-      \.prototype
+      (?:\.prototype|\['prototype'\]|\["prototype"\])
       (?:
         \.(#{IDENTIFIER_STR})
       | \[("(?:[^\\"\r\n]|\\.)*"|'(?:[^\\'\r\n]|\\.)*')\]
