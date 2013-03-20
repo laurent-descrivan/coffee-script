@@ -3,6 +3,8 @@
 # but some are created by other nodes as a method of code generation. To convert
 # the syntax tree into a string of JavaScript code, call `compile()` on the root.
 
+ayl_stackify_patch = true
+
 Error.stackTraceLimit = Infinity
 
 {Scope} = require './scope'
@@ -1330,7 +1332,7 @@ exports.Code = class Code extends Base
       else if not @static
         o.scope.parent.assign '_this', 'this'
     idt   = o.indent
-    code  = 'function'
+    code = 'function\n/* TFLAGG2 */'
     code  += ' ' + @name if @ctor
     code  += '('
     answer = [@makeCode(code)]
@@ -1340,6 +1342,10 @@ exports.Code = class Code extends Base
     answer.push @makeCode ') {'
     answer = answer.concat(@makeCode("\n"), @body.compileWithDeclarations(o), @makeCode("\n#{@tab}")) unless @body.isEmpty()
     answer.push @makeCode '}'
+
+    if ayl_stackify_patch and not @ctor
+      answer.unshift @makeCode("(#{utility "ayl_stackify"}(")
+      answer.push @makeCode('))')
 
     return [@makeCode(@tab), answer...] if @ctor
     if @front or (o.level >= LEVEL_ACCESS) then @wrapInBraces answer else answer
@@ -2128,6 +2134,34 @@ UTILITIES =
   # Shortcuts to speed up the lookup time for native functions.
   hasProp: -> "{}['hasOwnProperty']"
   slice  : -> "[]['slice']"
+
+  ayl_stackify: -> '''
+    (function(){
+      if (typeof __ayl_stackified == "undefined") {
+        __ayl_stackified = false;
+        __ayl_stackified_last_error = null;
+      }
+      return (function(fn){
+        return function(){
+          if(__ayl_stackified) {
+            return fn['apply'](this, arguments);
+          } else {
+            var result;
+            try {
+              __ayl_stackified = true;
+              result = fn['apply'](this, arguments)
+            } catch(e) {
+              __ayl_stackified = false;
+              __ayl_stackified_last_error = e;
+              throw(e);
+            }
+            __ayl_stackified = false;
+            return result;
+          }
+        }
+      });
+    })()
+  '''.replace(/\n/g, ' ')
 
 # Levels indicate a node's position in the AST. Useful for knowing if
 # parens are necessary or superfluous.
