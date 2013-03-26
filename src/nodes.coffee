@@ -1332,7 +1332,7 @@ exports.Code = class Code extends Base
       else if not @static
         o.scope.parent.assign '_this', 'this'
     idt   = o.indent
-    code = 'function\n/* TFLAGG2 */'
+    code = 'function'
     code  += ' ' + @name if @ctor
     code  += '('
     answer = [@makeCode(code)]
