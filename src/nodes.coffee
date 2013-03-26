@@ -3,7 +3,7 @@
 # but some are created by other nodes as a method of code generation. To convert
 # the syntax tree into a string of JavaScript code, call `compile()` on the root.
 
-ayl_stackify_patch = true
+ayl_stackify_patch = process?.env["AYL_COFFEESCRIPT_STACKIFY"] == "true"
 
 Error.stackTraceLimit = Infinity
 
